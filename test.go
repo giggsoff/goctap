@@ -12,8 +12,8 @@ import (
 	"os"
 	"net"
 	"runtime"
-	"errors"
 )
+
 var dataShards = flag.Int("data", 4, "Number of shards to split the data into, must be below 257.")
 var parShards = flag.Int("par", 2, "Number of parity shards")
 var lipport = flag.String("lipport", "0.0.0.0:10001", "Listening IP:port")
@@ -21,7 +21,7 @@ var cipport = flag.String("cipport", "127.0.0.1:10002", "Connection IP:port")
 var useRS = flag.Int("users", 0, "Use RS")
 
 func listenUDP(connection *net.UDPConn, quit chan struct{}, intf *water.Interface) {
-	buffer := make([]byte, 1500)
+	buffer := make([]byte, 1600)
 	n, remoteAddr, err := 0, new(net.UDPAddr), error(nil)
 	for err == nil {
 		n, remoteAddr, err = connection.ReadFromUDP(buffer)
@@ -36,14 +36,13 @@ func listenUDP(connection *net.UDPConn, quit chan struct{}, intf *water.Interfac
 	fmt.Println("listener failed - ", err)
 	quit <- struct{}{}
 }
-func listenTAP(intf *water.Interface,connection *net.UDPConn, quit chan struct{}, useRS int, rsEnc reedsolomon.Encoder) {
+func listenTAP(intf *water.Interface, connection *net.UDPConn, quit chan struct{}, useRS int, rsEnc reedsolomon.Encoder) {
 	var frame ethernet.Frame
-	frame.Resize(1500)
-	var err = errors.New("")
-	err = nil
+	frame.Resize(1550)
+	var err = error(nil)
 	for err == nil {
 		n, err := intf.Read([]byte(frame))
-		if n==0{
+		if n == 0 || err != nil {
 			continue
 		}
 		log.Printf("n: %d\n", n)
@@ -55,7 +54,7 @@ func listenTAP(intf *water.Interface,connection *net.UDPConn, quit chan struct{}
 		//log.Printf("Src: %s\n", frame.Source())
 		//log.Printf("Ethertype: % x\n", frame.Ethertype())
 		//log.Printf("Payload: % x\n", frame.Payload())
-		if useRS>0 {
+		if useRS > 0 {
 			shards, err := rsEnc.Split(frame.Payload())
 			checkErr(err)
 			//fmt.Printf("File split into %d data+parity shards with %d bytes/shard.\n", len(shards), len(shards[0]))
@@ -93,20 +92,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	LocalAddr,err := net.ResolveUDPAddr("udp4",*lipport)
+	LocalAddr, err := net.ResolveUDPAddr("udp4", *lipport)
 	checkErr(err)
-	ServerAddr,err := net.ResolveUDPAddr("udp",*cipport)
+	ServerAddr, err := net.ResolveUDPAddr("udp", *cipport)
 	checkErr(err)
 	Conn, err := net.DialUDP("udp", LocalAddr, ServerAddr)
 	checkErr(err)
 	//connection, err := net.ListenUDP("udp", LocalAddr)
 	//checkErr(err)
 	quitUDP := make(chan struct{})
-	for i := 0; i < runtime.NumCPU(); i++ {
+	fmt.Print(runtime.NumCPU())
+	for i := 0; i < 1; i++ {
 		go listenUDP(Conn, quitUDP, ifce)
 	}
 	quitTAP := make(chan struct{})
-	for i := 0; i < runtime.NumCPU(); i++ {
+	for i := 0; i < 1; i++ {
 		go listenTAP(ifce, Conn, quitTAP, *useRS, enc)
 	}
 	<-quitUDP
