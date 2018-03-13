@@ -74,7 +74,7 @@ func main() {
 	go func() {
 		buf := make([]byte, BUFFERSIZE)
 		for {
-			n, addr, err := lstnConn.ReadFromUDP(buf)
+			n, _/*addr*/, err := lstnConn.ReadFromUDP(buf)
 			// just debug
 			//header, _ := ipv4.ParseHeader(buf[:n])
 			//fmt.Printf("Received %d bytes from %v: %+v\n", n, addr, header)
