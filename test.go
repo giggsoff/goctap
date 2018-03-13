@@ -12,6 +12,7 @@ import (
 	"os"
 	"net"
 	"runtime"
+	"errors"
 )
 var dataShards = flag.Int("data", 4, "Number of shards to split the data into, must be below 257.")
 var parShards = flag.Int("par", 2, "Number of parity shards")
@@ -37,56 +38,47 @@ func listenUDP(connection *net.UDPConn, quit chan struct{}, intf *water.Interfac
 }
 func listenTAP(intf *water.Interface,connection *net.UDPConn, quit chan struct{}, useRS int, rsEnc reedsolomon.Encoder) {
 	var frame ethernet.Frame
-	frame.Resize(1450)
-	n, err := intf.Read([]byte(frame))
-	if err != nil {
-		log.Fatal(err)
-	}
-	frame = frame[:n]
-	_, err = connection.Write(frame)
-	checkErr(err)
-	log.Printf("Dst: %s\n", frame.Destination())
-	//log.Printf("Src: %s\n", frame.Source())
-	//log.Printf("Ethertype: % x\n", frame.Ethertype())
-	//log.Printf("Payload: % x\n", frame.Payload())
-	if useRS>0 {
-		shards, err := rsEnc.Split(frame.Payload())
+	frame.Resize(1500)
+	var err = errors.New("")
+	err = nil
+	for err == nil {
+		n, err := intf.Read([]byte(frame))
+		if err != nil {
+			log.Fatal(err)
+		}
+		frame = frame[:n]
+		_, err = connection.Write(frame)
 		checkErr(err)
-		//fmt.Printf("File split into %d data+parity shards with %d bytes/shard.\n", len(shards), len(shards[0]))
-		// Encode parity
-		err = rsEnc.Encode(shards)
-		checkErr(err)
-		ok, err := rsEnc.Verify(shards)
-		if ok {
-			//fmt.Println("No reconstruction needed")
-		} else {
-			fmt.Println("Verification failed. Reconstructing data")
-			err = rsEnc.Reconstruct(shards)
-			if err != nil {
-				fmt.Println("Reconstruct failed -", err)
-				os.Exit(1)
-			}
-			ok, err = rsEnc.Verify(shards)
-			if !ok {
-				fmt.Println("Verification failed after reconstruction, data likely corrupted.")
-				os.Exit(1)
-			}
+		log.Printf("Dst: %s\n", frame.Destination())
+		//log.Printf("Src: %s\n", frame.Source())
+		//log.Printf("Ethertype: % x\n", frame.Ethertype())
+		//log.Printf("Payload: % x\n", frame.Payload())
+		if useRS>0 {
+			shards, err := rsEnc.Split(frame.Payload())
 			checkErr(err)
+			//fmt.Printf("File split into %d data+parity shards with %d bytes/shard.\n", len(shards), len(shards[0]))
+			// Encode parity
+			err = rsEnc.Encode(shards)
+			checkErr(err)
+			ok, err := rsEnc.Verify(shards)
+			if ok {
+				//fmt.Println("No reconstruction needed")
+			} else {
+				fmt.Println("Verification failed. Reconstructing data")
+				err = rsEnc.Reconstruct(shards)
+				if err != nil {
+					fmt.Println("Reconstruct failed -", err)
+					os.Exit(1)
+				}
+				ok, err = rsEnc.Verify(shards)
+				if !ok {
+					fmt.Println("Verification failed after reconstruction, data likely corrupted.")
+					os.Exit(1)
+				}
+				checkErr(err)
+			}
 		}
 	}
-	buffer := make([]byte, 1500)
-	n, remoteAddr, err := 0, new(net.UDPAddr), error(nil)
-	for err == nil {
-		n, remoteAddr, err = connection.ReadFromUDP(buffer)
-		// you might copy out the contents of the packet here, to
-		// `var r myapp.Request`, say, and `go handleRequest(r)` (or
-		// send it down a channel) to free up the listening
-		// goroutine. you do *need* to copy then, though,
-		// because you've only made one buffer per listen().
-		fmt.Println("from", remoteAddr, "-", buffer[:n])
-		intf.Write(buffer[:n])
-	}
-	fmt.Println("listener failed - ", err)
 	quit <- struct{}{}
 }
 func main() {
