@@ -26,6 +26,7 @@ func listenUDP(connection *net.UDPConn, quit chan struct{}, intf *water.Interfac
 	n, remoteAddr, err := 0, new(net.UDPAddr), error(nil)
 	for err == nil {
 		n, remoteAddr, err = connection.ReadFromUDP(buffer)
+		checkErr(err)
 		log.Printf("RECEIVE UDP n: %d\n", n)
 		// you might copy out the contents of the packet here, to
 		// `var r myapp.Request`, say, and `go handleRequest(r)` (or
@@ -34,6 +35,7 @@ func listenUDP(connection *net.UDPConn, quit chan struct{}, intf *water.Interfac
 		// because you've only made one buffer per listen().
 		fmt.Println("from", remoteAddr, "-", n)
 		n, err = intf.Write(buffer[:n])
+		checkErr(err)
 		log.Printf("SEND TAP n: %d\n", n)
 	}
 	fmt.Println("listener failed - ", err)
@@ -41,7 +43,7 @@ func listenUDP(connection *net.UDPConn, quit chan struct{}, intf *water.Interfac
 }
 func listenTAP(intf *water.Interface, connection *net.UDPConn, addr *net.UDPAddr, quit chan struct{}, useRS int, rsEnc reedsolomon.Encoder) {
 	var frame ethernet.Frame
-	frame.Resize(1550)
+	frame.Resize(1518)
 	var err = error(nil)
 	for err == nil {
 		n, err := intf.Read([]byte(frame))
