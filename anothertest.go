@@ -63,11 +63,11 @@ func main() {
 	if nil != err {
 		log.Fatalln("Unable to allocate TUN interface:", err)
 	}
-	log.Println("Interface allocated:", iface.Name())
+	log.Println("Interface allocated:", iface1.Name())
 	// set interface parameters
-	runIP("link", "set", "dev", iface.Name(), "mtu", MTU)
-	runIP("addr", "add", *localIP, "dev", iface.Name())
-	runIP("link", "set", "dev", iface.Name(), "up")
+	runIP("link", "set", "dev", iface1.Name(), "mtu", MTU)
+	runIP("addr", "add", *localIP, "dev", iface1.Name())
+	runIP("link", "set", "dev", iface1.Name(), "up")
 	// reslove remote addr
 	remoteAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%v", *remoteIP, *port))
 	if nil != err {
