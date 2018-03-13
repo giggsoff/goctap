@@ -1,3 +1,4 @@
+// +build linux
 package main
 
 import (
@@ -21,6 +22,7 @@ var (
 	localIP  = flag.String("local", "", "Local tun interface IP/MASK like 192.168.3.3⁄24")
 	remoteIP = flag.String("remote", "", "Remote server (external) IP like 8.8.8.8")
 	port     = flag.Int("port", 4321, "UDP port for communication")
+	threads = flag.Int("threads", 1, "Threads NUM")
 )
 
 func runIP(args ...string) {
@@ -45,29 +47,28 @@ func main() {
 		flag.Usage()
 		log.Fatalln("\nremote server is not specified")
 	}
-	// create TUN interface
-	iface1, err := water.New(water.Config{
-		DeviceType: water.TAP,
-		PlatformSpecificParams: water.PlatformSpecificParams{
-			MultiQueue: true,
-			Name: "tap0",
-		},
-	})
-	iface2, err := water.New(water.Config{
-		DeviceType: water.TAP,
-		PlatformSpecificParams: water.PlatformSpecificParams{
-			MultiQueue: true,
-			Name: "tap0",
-		},
-	})
-	if nil != err {
-		log.Fatalln("Unable to allocate TUN interface:", err)
+	var n = *threads
+	var ifname = "tap0"
+	ifaces := make([]*water.Interface, n)
+	var err = error(nil)
+	for i := 0; i < n; i++ {
+		// create TUN interface
+		ifaces[i], err = water.New(water.Config{
+			DeviceType: water.TAP,
+			PlatformSpecificParams: water.PlatformSpecificParams{
+				MultiQueue: true,
+				Name:       ifname,
+			},
+		})
+		if nil != err {
+			log.Fatalln("Unable to allocate TUN interface:", err)
+		}
 	}
-	log.Println("Interface allocated:", iface1.Name())
+	log.Println("Interface allocated:", ifname)
 	// set interface parameters
-	runIP("link", "set", "dev", iface1.Name(), "mtu", MTU)
-	runIP("addr", "add", *localIP, "dev", iface1.Name())
-	runIP("link", "set", "dev", iface1.Name(), "up")
+	runIP("link", "set", "dev", ifname, "mtu", MTU)
+	runIP("addr", "add", *localIP, "dev", ifname)
+	runIP("link", "set", "dev", ifname, "up")
 	// reslove remote addr
 	remoteAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%v", *remoteIP, *port))
 	if nil != err {
@@ -85,6 +86,7 @@ func main() {
 	defer lstnConn.Close()
 	quitUDP := make(chan struct{})
 	// recv in separate thread
+	for i := 0; i < n; i++ {
 		go func() {
 			buf := make([]byte, BUFFERSIZE)
 			for {
@@ -97,54 +99,26 @@ func main() {
 					continue
 				}
 				// write to TUN interface
-				iface1.Write(buf[:n])
+				ifaces[i].Write(buf[:n])
 			}
 			quitUDP <- struct{}{}
 		}()
-	go func() {
-		buf := make([]byte, BUFFERSIZE)
-		for {
-			n, _ /*addr*/ , err := lstnConn.ReadFromUDP(buf)
-			// just debug
-			//header, _ := ipv4.ParseHeader(buf[:n])
-			//fmt.Printf("Received %d bytes from %v: %+v\n", n, addr, header)
-			if err != nil || n == 0 {
-				fmt.Println("Error: ", err)
-				continue
+	}
+	for i := 0; i < n; i++ {
+		go func() {
+			packet := make([]byte, BUFFERSIZE)
+			for {
+				plen, err := ifaces[i].Read(packet)
+				if err != nil {
+					break
+				}
+				// debug :)
+				//header, _ := ipv4.ParseHeader(packet[:plen])
+				//fmt.Printf("Sending to remote: %+v (%+v)\n", header, err)
+				// real send
+				lstnConn.WriteToUDP(packet[:plen], remoteAddr)
 			}
-			// write to TUN interface
-			iface2.Write(buf[:n])
-		}
-		quitUDP <- struct{}{}
-	}()
-	// and one more loop
-	go func() {
-		packet := make([]byte, BUFFERSIZE)
-		for {
-			plen, err := iface1.Read(packet)
-			if err != nil {
-				break
-			}
-			// debug :)
-			//header, _ := ipv4.ParseHeader(packet[:plen])
-			//fmt.Printf("Sending to remote: %+v (%+v)\n", header, err)
-			// real send
-			lstnConn.WriteToUDP(packet[:plen], remoteAddr)
-		}
-	}()
-	go func() {
-		packet := make([]byte, BUFFERSIZE)
-		for {
-			plen, err := iface2.Read(packet)
-			if err != nil {
-				break
-			}
-			// debug :)
-			//header, _ := ipv4.ParseHeader(packet[:plen])
-			//fmt.Printf("Sending to remote: %+v (%+v)\n", header, err)
-			// real send
-			lstnConn.WriteToUDP(packet[:plen], remoteAddr)
-		}
-	}()
+		}()
+	}
 	<-quitUDP
 }
