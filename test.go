@@ -30,7 +30,7 @@ func listenUDP(connection *net.UDPConn, quit chan struct{}, intf *water.Interfac
 		// send it down a channel) to free up the listening
 		// goroutine. you do *need* to copy then, though,
 		// because you've only made one buffer per listen().
-		fmt.Println("from", remoteAddr, "-", buffer[:n])
+		fmt.Println("from", remoteAddr, "-", n)
 		intf.Write(buffer[:n])
 	}
 	fmt.Println("listener failed - ", err)
@@ -43,9 +43,11 @@ func listenTAP(intf *water.Interface,connection *net.UDPConn, quit chan struct{}
 	err = nil
 	for err == nil {
 		n, err := intf.Read([]byte(frame))
-		if err != nil {
-			log.Fatal(err)
+		if n==0{
+			continue
 		}
+		log.Printf("n: %d\n", n)
+		checkErr(err)
 		frame = frame[:n]
 		_, err = connection.Write(frame)
 		checkErr(err)
