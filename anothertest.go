@@ -50,10 +50,9 @@ func main() {
 	var n = *threads
 	var ifname = "tap0"
 	ifaces := make([]*water.Interface, n)
-	var err = error(nil)
 	for i := 0; i < n; i++ {
 		// create TUN interface
-		ifaces[i], err = water.New(water.Config{
+		iface, err := water.New(water.Config{
 			DeviceType: water.TAP,
 			PlatformSpecificParams: water.PlatformSpecificParams{
 				MultiQueue: true,
@@ -63,6 +62,7 @@ func main() {
 		if nil != err {
 			log.Fatalln("Unable to allocate TUN interface:", err)
 		}
+		ifaces[i] = iface
 	}
 	log.Println("Interface allocated:", ifname)
 	// set interface parameters
