@@ -105,11 +105,11 @@ func main() {
 	checkErr(err)
 	Conn, err := net.DialUDP("udp", LocalAddr, ServerAddr)
 	checkErr(err)
-	connection, err := net.ListenUDP("udp", LocalAddr)
-	checkErr(err)
+	//connection, err := net.ListenUDP("udp", LocalAddr)
+	//checkErr(err)
 	quitUDP := make(chan struct{})
 	for i := 0; i < runtime.NumCPU(); i++ {
-		go listenUDP(connection, quitUDP, ifce)
+		go listenUDP(Conn, quitUDP, ifce)
 	}
 	quitTAP := make(chan struct{})
 	for i := 0; i < runtime.NumCPU(); i++ {
