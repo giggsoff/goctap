@@ -47,10 +47,9 @@ func main() {
 		flag.Usage()
 		log.Fatalln("\nremote server is not specified")
 	}
-	var n = *threads
 	var ifname = "tap0"
-	ifaces := make([]*water.Interface, n)
-	for i := 0; i < n; i++ {
+	ifaces := make([]*water.Interface, *threads)
+	for i := 0; i < *threads; i++ {
 		// create TUN interface
 		iface, err := water.New(water.Config{
 			DeviceType: water.TAP,
@@ -86,7 +85,7 @@ func main() {
 	defer lstnConn.Close()
 	quitUDP := make(chan struct{})
 	// recv in separate thread
-	for i := 0; i < n; i++ {
+	for i := 0; i < *threads; i++ {
 		go func() {
 			buf := make([]byte, BUFFERSIZE)
 			for {
@@ -104,7 +103,7 @@ func main() {
 			quitUDP <- struct{}{}
 		}()
 	}
-	for i := 0; i < n; i++ {
+	for i := 0; i < *threads; i++ {
 		go func() {
 			packet := make([]byte, BUFFERSIZE)
 			for {
