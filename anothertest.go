@@ -86,7 +86,7 @@ func main() {
 	quitUDP := make(chan struct{})
 	// recv in separate thread
 	for i := 0; i < *threads; i++ {
-		go func() {
+		go func(threadnum int) {
 			buf := make([]byte, BUFFERSIZE)
 			for {
 				n, _ /*addr*/ , err := lstnConn.ReadFromUDP(buf)
@@ -98,16 +98,16 @@ func main() {
 					continue
 				}
 				// write to TUN interface
-				ifaces[i].Write(buf[:n])
+				ifaces[threadnum].Write(buf[:n])
 			}
 			quitUDP <- struct{}{}
-		}()
+		}(i)
 	}
 	for i := 0; i < *threads; i++ {
-		go func() {
+		go func(threadnum int) {
 			packet := make([]byte, BUFFERSIZE)
 			for {
-				plen, err := ifaces[i].Read(packet)
+				plen, err := ifaces[threadnum].Read(packet)
 				if err != nil {
 					break
 				}
@@ -117,7 +117,7 @@ func main() {
 				// real send
 				lstnConn.WriteToUDP(packet[:plen], remoteAddr)
 			}
-		}()
+		}(i)
 	}
 	<-quitUDP
 }
