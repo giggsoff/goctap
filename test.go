@@ -12,6 +12,7 @@ import (
 	"os"
 	"net"
 	"runtime"
+	"io"
 )
 
 var dataShards = flag.Int("data", 4, "Number of shards to split the data into, must be below 257.")
@@ -42,7 +43,7 @@ func listenTAP(intf *water.Interface, connection *net.UDPConn, quit chan struct{
 	var err = error(nil)
 	for err == nil {
 		n, err := intf.Read([]byte(frame))
-		if n == 0 || err != nil {
+		if n == 0 || (err != nil && err != io.EOF) {
 			continue
 		}
 		log.Printf("n: %d\n", n)
@@ -51,9 +52,9 @@ func listenTAP(intf *water.Interface, connection *net.UDPConn, quit chan struct{
 		_, err = connection.Write(frame)
 		checkErr(err)
 		log.Printf("Dst: %s\n", frame.Destination())
-		//log.Printf("Src: %s\n", frame.Source())
-		//log.Printf("Ethertype: % x\n", frame.Ethertype())
-		//log.Printf("Payload: % x\n", frame.Payload())
+		log.Printf("Src: %s\n", frame.Source())
+		log.Printf("Ethertype: % x\n", frame.Ethertype())
+		log.Printf("Payload: % x\n", frame.Payload())
 		if useRS > 0 {
 			shards, err := rsEnc.Split(frame.Payload())
 			checkErr(err)
@@ -94,9 +95,9 @@ func main() {
 	}
 	LocalAddr, err := net.ResolveUDPAddr("udp4", *lipport)
 	checkErr(err)
-	ServerAddr, err := net.ResolveUDPAddr("udp", *cipport)
+	ServerAddr, err := net.ResolveUDPAddr("udp4", *cipport)
 	checkErr(err)
-	Conn, err := net.DialUDP("udp", LocalAddr, ServerAddr)
+	Conn, err := net.DialUDP("udp4", LocalAddr, ServerAddr)
 	checkErr(err)
 	//connection, err := net.ListenUDP("udp", LocalAddr)
 	//checkErr(err)
