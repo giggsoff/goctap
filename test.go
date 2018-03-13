@@ -104,6 +104,7 @@ func main() {
 	checkErr(err)
 	Conn, err := net.ListenUDP("udp4", LocalAddr)
 	checkErr(err)
+	defer Conn.Close()
 	//connection, err := net.ListenUDP("udp", LocalAddr)
 	//checkErr(err)
 	quitUDP := make(chan struct{})
