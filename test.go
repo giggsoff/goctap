@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/songgao/packets/ethernet"
-	"github.com/giggsoff/water"
+	"github.com/songgao/water"
 
 	"github.com/klauspost/reedsolomon"
 	"flag"
@@ -94,6 +94,10 @@ func main() {
 	checkErr(err)
 	ifce, err := water.New(water.Config{
 		DeviceType: water.TAP,
+		PlatformSpecificParams: water.PlatformSpecificParams{
+			ComponentID: "tap0901",
+			Network:     "192.168.1.10/24",
+		},
 	})
 	if err != nil {
 		log.Fatal(err)

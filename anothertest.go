@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 	//"golang.org/x/net/ipv4"
-	"github.com/giggsoff/water"
+	"github.com/songgao/water"
 )
 
 const (
@@ -46,7 +46,20 @@ func main() {
 		log.Fatalln("\nremote server is not specified")
 	}
 	// create TUN interface
-	iface, err := water.NewTUN("")
+	iface1, err := water.New(water.Config{
+		DeviceType: water.TAP,
+		PlatformSpecificParams: water.PlatformSpecificParams{
+			MultiQueue: true,
+			Name: "tap0",
+		},
+	})
+	iface2, err := water.New(water.Config{
+		DeviceType: water.TAP,
+		PlatformSpecificParams: water.PlatformSpecificParams{
+			MultiQueue: true,
+			Name: "tap0",
+		},
+	})
 	if nil != err {
 		log.Fatalln("Unable to allocate TUN interface:", err)
 	}
@@ -70,11 +83,28 @@ func main() {
 		log.Fatalln("Unable to listen on UDP socket:", err)
 	}
 	defer lstnConn.Close()
+	quitUDP := make(chan struct{})
 	// recv in separate thread
+		go func() {
+			buf := make([]byte, BUFFERSIZE)
+			for {
+				n, _ /*addr*/ , err := lstnConn.ReadFromUDP(buf)
+				// just debug
+				//header, _ := ipv4.ParseHeader(buf[:n])
+				//fmt.Printf("Received %d bytes from %v: %+v\n", n, addr, header)
+				if err != nil || n == 0 {
+					fmt.Println("Error: ", err)
+					continue
+				}
+				// write to TUN interface
+				iface1.Write(buf[:n])
+			}
+			quitUDP <- struct{}{}
+		}()
 	go func() {
 		buf := make([]byte, BUFFERSIZE)
 		for {
-			n, _/*addr*/, err := lstnConn.ReadFromUDP(buf)
+			n, _ /*addr*/ , err := lstnConn.ReadFromUDP(buf)
 			// just debug
 			//header, _ := ipv4.ParseHeader(buf[:n])
 			//fmt.Printf("Received %d bytes from %v: %+v\n", n, addr, header)
@@ -83,20 +113,38 @@ func main() {
 				continue
 			}
 			// write to TUN interface
-			iface.Write(buf[:n])
+			iface2.Write(buf[:n])
 		}
+		quitUDP <- struct{}{}
 	}()
 	// and one more loop
-	packet := make([]byte, BUFFERSIZE)
-	for {
-		plen, err := iface.Read(packet)
-		if err != nil {
-			break
+	go func() {
+		packet := make([]byte, BUFFERSIZE)
+		for {
+			plen, err := iface1.Read(packet)
+			if err != nil {
+				break
+			}
+			// debug :)
+			//header, _ := ipv4.ParseHeader(packet[:plen])
+			//fmt.Printf("Sending to remote: %+v (%+v)\n", header, err)
+			// real send
+			lstnConn.WriteToUDP(packet[:plen], remoteAddr)
 		}
-		// debug :)
-		//header, _ := ipv4.ParseHeader(packet[:plen])
-		//fmt.Printf("Sending to remote: %+v (%+v)\n", header, err)
-		// real send
-		lstnConn.WriteToUDP(packet[:plen], remoteAddr)
-	}
+	}()
+	go func() {
+		packet := make([]byte, BUFFERSIZE)
+		for {
+			plen, err := iface2.Read(packet)
+			if err != nil {
+				break
+			}
+			// debug :)
+			//header, _ := ipv4.ParseHeader(packet[:plen])
+			//fmt.Printf("Sending to remote: %+v (%+v)\n", header, err)
+			// real send
+			lstnConn.WriteToUDP(packet[:plen], remoteAddr)
+		}
+	}()
+	<-quitUDP
 }
