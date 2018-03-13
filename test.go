@@ -26,18 +26,20 @@ func listenUDP(connection *net.UDPConn, quit chan struct{}, intf *water.Interfac
 	n, remoteAddr, err := 0, new(net.UDPAddr), error(nil)
 	for err == nil {
 		n, remoteAddr, err = connection.ReadFromUDP(buffer)
+		log.Printf("RECEIVE UDP n: %d\n", n)
 		// you might copy out the contents of the packet here, to
 		// `var r myapp.Request`, say, and `go handleRequest(r)` (or
 		// send it down a channel) to free up the listening
 		// goroutine. you do *need* to copy then, though,
 		// because you've only made one buffer per listen().
 		fmt.Println("from", remoteAddr, "-", n)
-		intf.Write(buffer[:n])
+		n, err = intf.Write(buffer[:n])
+		log.Printf("SEND TAP n: %d\n", n)
 	}
 	fmt.Println("listener failed - ", err)
 	quit <- struct{}{}
 }
-func listenTAP(intf *water.Interface, connection *net.UDPConn, quit chan struct{}, useRS int, rsEnc reedsolomon.Encoder) {
+func listenTAP(intf *water.Interface, connection *net.UDPConn, addr *net.UDPAddr, quit chan struct{}, useRS int, rsEnc reedsolomon.Encoder) {
 	var frame ethernet.Frame
 	frame.Resize(1550)
 	var err = error(nil)
@@ -46,15 +48,16 @@ func listenTAP(intf *water.Interface, connection *net.UDPConn, quit chan struct{
 		if n == 0 || (err != nil && err != io.EOF) {
 			continue
 		}
-		log.Printf("n: %d\n", n)
+		log.Printf("RECEIVE TAP n: %d\n", n)
 		checkErr(err)
 		frame = frame[:n]
-		_, err = connection.Write(frame)
+		n, err = connection.WriteToUDP(frame, addr)
+		log.Printf("SEND UDP n: %d\n", n)
 		checkErr(err)
-		log.Printf("Dst: %s\n", frame.Destination())
-		log.Printf("Src: %s\n", frame.Source())
-		log.Printf("Ethertype: % x\n", frame.Ethertype())
-		log.Printf("Payload: % x\n", frame.Payload())
+		//log.Printf("Dst: %s\n", frame.Destination())
+		//log.Printf("Src: %s\n", frame.Source())
+		//log.Printf("Ethertype: % x\n", frame.Ethertype())
+		//log.Printf("Payload: % x\n", frame.Payload())
 		if useRS > 0 {
 			shards, err := rsEnc.Split(frame.Payload())
 			checkErr(err)
@@ -97,7 +100,7 @@ func main() {
 	checkErr(err)
 	ServerAddr, err := net.ResolveUDPAddr("udp4", *cipport)
 	checkErr(err)
-	Conn, err := net.DialUDP("udp4", LocalAddr, ServerAddr)
+	Conn, err := net.ListenUDP("udp4", LocalAddr)
 	checkErr(err)
 	//connection, err := net.ListenUDP("udp", LocalAddr)
 	//checkErr(err)
@@ -108,7 +111,7 @@ func main() {
 	}
 	quitTAP := make(chan struct{})
 	for i := 0; i < 1; i++ {
-		go listenTAP(ifce, Conn, quitTAP, *useRS, enc)
+		go listenTAP(ifce, Conn, ServerAddr, quitTAP, *useRS, enc)
 	}
 	<-quitUDP
 	<-quitTAP
